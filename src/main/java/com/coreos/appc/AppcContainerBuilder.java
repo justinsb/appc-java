@@ -18,6 +18,8 @@ public class AppcContainerBuilder extends ContainerBuilder {
 
   final File aciFile;
 
+  public boolean compress = true;
+
   public AppcContainerBuilder(File aciFile) {
     this.aciFile = aciFile;
   }
@@ -31,7 +33,7 @@ public class AppcContainerBuilder extends ContainerBuilder {
   public void buildImage(String imageName) throws Exception {
     log.info("Building image " + imageName);
 
-    try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile)) {
+    try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile, compress)) {
       AciManifest manifest = createAciManifest(imageName);
 
       aciFileWriter.addManifest(manifest);

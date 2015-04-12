@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.util.Set;
+import java.util.zip.GZIPOutputStream;
 
 import org.apache.commons.compress.archivers.ArchiveException;
 import org.apache.commons.compress.archivers.ArchiveOutputStream;
@@ -24,11 +25,14 @@ public class AciFileWriter implements Closeable {
 
   final Set<String> directories = Sets.newHashSet();
 
-  public AciFileWriter(File outputFile) throws IOException {
-    this(new FileOutputStream(outputFile));
+  public AciFileWriter(File outputFile, boolean compress) throws IOException {
+    this(new FileOutputStream(outputFile), compress);
   }
 
-  public AciFileWriter(OutputStream outputStream) throws IOException {
+  public AciFileWriter(OutputStream outputStream, boolean compress) throws IOException {
+    if (compress) {
+      outputStream = new GZIPOutputStream(outputStream);
+    }
     ArchiveOutputStream tarOutputStream;
     try {
       tarOutputStream = new ArchiveStreamFactory().createArchiveOutputStream(
