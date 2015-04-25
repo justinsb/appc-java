@@ -30,11 +30,11 @@ public class AppcContainerBuilder extends ContainerBuilder {
   }
 
   @Override
-  public void buildImage(String imageName) throws Exception {
+  public void buildImage(String imageName, String imageVersion) throws Exception {
     log.info("Building image " + imageName);
 
     try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile, compress)) {
-      AciManifest manifest = createAciManifest(imageName);
+      AciManifest manifest = createAciManifest(imageName, imageVersion);
 
       aciFileWriter.addManifest(manifest);
 
@@ -63,7 +63,7 @@ public class AppcContainerBuilder extends ContainerBuilder {
     }
   }
 
-  private AciManifest createAciManifest(String imageName) throws IOException {
+  private AciManifest createAciManifest(String imageName, String version) throws IOException {
     AciManifest manifest = new AciManifest();
 
     manifest.acKind = "ImageManifest";
@@ -71,6 +71,10 @@ public class AppcContainerBuilder extends ContainerBuilder {
     manifest.name = imageName;
     if (baseImage != null) {
       manifest.addDependency(baseImage);
+    }
+
+    if (version != null) {
+      manifest.addLabel("version", version);
     }
 
     if (maintainer != null) {

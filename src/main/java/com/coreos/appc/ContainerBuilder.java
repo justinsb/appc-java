@@ -23,5 +23,5 @@ public abstract class ContainerBuilder {
 
   public abstract void addFiles(List<ContainerFile> containerFiles) throws IOException;
 
-  public abstract void buildImage(String imageName) throws Exception;
+  public abstract void buildImage(String imageName, String imageVersion) throws Exception;
 }

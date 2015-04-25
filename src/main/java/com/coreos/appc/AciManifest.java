@@ -12,7 +12,7 @@ public class AciManifest {
   public String acKind;
   public String acVersion;
   public String name;
-  public Map<String, String> labels;
+  public List<Label> labels;
   public App app;
   public List<Dependency> dependencies;
   public List<String> pathWhitelist;
@@ -69,6 +69,11 @@ public class AciManifest {
     public JsonObject value;
   }
 
+  public static class Label {
+    public String name;
+    public String value;
+  }
+
   public static class MountPoint {
     public String name;
     public String path;
@@ -118,5 +123,15 @@ public class AciManifest {
       app = new App();
     }
     return app;
+  }
+
+  public void addLabel(String name, String value) {
+    if (labels == null) {
+      labels = Lists.newArrayList();
+    }
+    Label label = new Label();
+    label.name = name;
+    label.value = value;
+    labels.add(label);
   }
 }

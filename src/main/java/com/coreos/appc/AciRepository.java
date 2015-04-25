@@ -5,5 +5,5 @@ import java.io.File;
 import org.slf4j.Logger;
 
 public abstract class AciRepository {
-  public abstract void push(AciImageInfo imageInfo, File image, Logger log);
+  public abstract void push(AciImageInfo imageInfo, File image, byte[] signature, Logger log);
 }
