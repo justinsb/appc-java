@@ -2,6 +2,7 @@ package com.coreos.appc;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 
 import org.slf4j.Logger;
 
@@ -26,7 +27,86 @@ public class S3AciRepository extends AciRepository {
   }
 
   @Override
-  public void push(AciImageInfo imageInfo, File image, Logger log) {
+  public void push(AciImageInfo imageInfo, File image, byte[] signature, Logger log) {
+    String imageKey = buildKey(imageInfo, "aci");
+
+    {
+      log.info("Uploading image to {}/{}", bucketName, imageKey);
+      PutObjectRequest request = new PutObjectRequest(bucketName, imageKey, image);
+      if (makePublic) {
+        request.withCannedAcl(CannedAccessControlList.PublicRead);
+      }
+      s3.putObject(request);
+    }
+
+    String signatureKey = buildKey(imageInfo, "aci.asc");
+    if (signature != null) {
+      InputStream contents = new ByteArrayInputStream(signature);
+      ObjectMetadata metadata = new ObjectMetadata();
+      metadata.setContentLength(signature.length);
+      PutObjectRequest request = new PutObjectRequest(bucketName, signatureKey, contents, metadata);
+      if (makePublic) {
+        request.withCannedAcl(CannedAccessControlList.PublicRead);
+      }
+      log.info("Uploading signature to {}/{}", bucketName, signatureKey);
+      s3.putObject(request);
+    }
+
+    if (updateLatest) {
+      String tag = "latest";
+      log.info("Setting up redirect for {}", tag);
+
+      String tagKey = buildKey(imageInfo, "aci", tag);
+
+      String redirectTo = "/" + imageKey;
+      createRedirect(tagKey, redirectTo);
+    }
+
+    if (updateLatest && signature != null) {
+      String tag = "latest";
+      log.info("Setting up signature redirect for {}", tag);
+
+      String tagSignatureKey = buildKey(imageInfo, "aci.asc", tag);
+      //
+      // InputStream contents = new ByteArrayInputStream(signature);
+      // ObjectMetadata metadata = new ObjectMetadata();
+      // metadata.setContentLength(signature.length);
+      // PutObjectRequest request = new PutObjectRequest(bucketName, tagSignatureKey, contents,
+      // metadata);
+      // if (makePublic) {
+      // request.withCannedAcl(CannedAccessControlList.PublicRead);
+      // }
+      // log.info("Uploading signature to {}/{}", bucketName, tagSignatureKey);
+      // s3.putObject(request);
+
+      String redirectTo = "/" + signatureKey;
+      createRedirect(tagSignatureKey, redirectTo);
+    }
+  }
+
+  private void createRedirect(String fromKey, String redirectTo) {
+    ObjectMetadata metadata = new ObjectMetadata();
+    metadata.setContentLength(0);
+    metadata.setHeader("x-amz-website-redirect-location", redirectTo);
+    PutObjectRequest request = new PutObjectRequest(bucketName, fromKey, new ByteArrayInputStream(
+        new byte[0]), metadata);
+    if (makePublic) {
+      request.withCannedAcl(CannedAccessControlList.PublicRead);
+    }
+    s3.putObject(request);
+  }
+
+  private String buildKey(AciImageInfo imageInfo, String extension) {
+
+    String version = imageInfo.version;
+    if (Strings.isNullOrEmpty(version)) {
+      version = AciImageInfo.DEFAULT_VERSION;
+    }
+
+    return buildKey(imageInfo, extension, version);
+  }
+
+  private String buildKey(AciImageInfo imageInfo, String extension, String version) {
     String baseKey = prefix;
     if (Strings.isNullOrEmpty(baseKey)) {
       baseKey = "";
@@ -39,11 +119,6 @@ public class S3AciRepository extends AciRepository {
       throw new IllegalArgumentException("name is required");
     }
 
-    String version = imageInfo.version;
-    if (Strings.isNullOrEmpty(version)) {
-      version = AciImageInfo.DEFAULT_VERSION;
-    }
-
     String os = imageInfo.os;
     if (Strings.isNullOrEmpty(os)) {
       os = AciImageInfo.DEFAULT_OS;
@@ -54,38 +129,10 @@ public class S3AciRepository extends AciRepository {
       arch = AciImageInfo.DEFAULT_ARCH;
     }
 
-    String ext = "aci";
-
     // key += name + "-" + version + "-" + os + "-" + arch + "." + ext;
 
-    String key = baseKey + os + "/" + arch + "/" + bucketName + "/" + name + "-" + version + "."
-        + ext;
+    String key = baseKey + os + "/" + arch + "/" + name + "-" + version + "." + extension;
 
-    PutObjectRequest request = new PutObjectRequest(bucketName, key, image);
-    if (makePublic) {
-      request.withCannedAcl(CannedAccessControlList.PublicRead);
-    }
-    log.info("Uploading image to {}/{}", bucketName, key);
-    s3.putObject(request);
-
-    if (updateLatest) {
-      String tag = "latest";
-
-      log.info("Setting up redirect for {}", tag);
-      String tagKey = baseKey + os + "/" + arch + "/" + bucketName + "/" + name + "-" + tag + "."
-          + ext;
-
-      String redirectTo = "/" + key;
-
-      ObjectMetadata metadata = new ObjectMetadata();
-      metadata.setContentLength(0);
-      metadata.setHeader("x-amz-website-redirect-location", redirectTo);
-      request = new PutObjectRequest(bucketName, tagKey, new ByteArrayInputStream(new byte[0]),
-          metadata);
-      if (makePublic) {
-        request.withCannedAcl(CannedAccessControlList.PublicRead);
-      }
-      s3.putObject(request);
-    }
+    return key;
   }
 }

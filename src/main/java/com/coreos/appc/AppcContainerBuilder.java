@@ -127,8 +127,7 @@ public class AppcContainerBuilder extends ContainerBuilder {
 
       return args;
     } else {
-      final List<String> args = ImmutableList.copyOf(Splitter.on(WHITESPACE).omitEmptyStrings()
-          .split(cmd));
+      final List<String> args = ImmutableList.copyOf(Splitter.on(WHITESPACE).omitEmptyStrings().split(cmd));
       return args;
     }
   }
