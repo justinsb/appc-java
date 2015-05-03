@@ -31,7 +31,7 @@ public class AppcContainerBuilder extends ContainerBuilder {
 
   @Override
   public void buildImage(String imageName, String imageVersion) throws Exception {
-    log.info("Building image " + imageName);
+    log.debug("Building image " + imageName);
 
     try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile, compress)) {
       AciManifest manifest = createAciManifest(imageName, imageVersion);
@@ -59,7 +59,7 @@ public class AppcContainerBuilder extends ContainerBuilder {
         // final Path relativePath = Paths.get(containerFile.imagePath);
         // copiedPaths.add(relativePath.toString());
       }
-      log.info("Built " + imageName);
+      log.info("Built ACI " + imageName + ":" + imageVersion);
     }
   }
 
