@@ -1,5 +1,6 @@
 package com.coreos.appc;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -23,5 +24,9 @@ public abstract class ContainerBuilder {
 
   public abstract void addFiles(List<ContainerFile> containerFiles) throws IOException;
 
-  public abstract void buildImage(String imageName, String imageVersion) throws Exception;
+  public abstract void buildImage(File manifestFile) throws Exception;
+
+  public abstract void writeManifest(File manifestFile, String imageName, String aciVersion) throws IOException;
+
+  public abstract List<ContainerFile> getContainerFiles();
 }

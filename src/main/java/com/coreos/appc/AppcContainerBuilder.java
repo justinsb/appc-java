@@ -4,13 +4,17 @@ import static com.google.common.base.CharMatcher.WHITESPACE;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
+import java.io.StringWriter;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
+import com.google.common.io.Files;
 
 public class AppcContainerBuilder extends ContainerBuilder {
 
@@ -30,16 +34,15 @@ public class AppcContainerBuilder extends ContainerBuilder {
   }
 
   @Override
-  public void buildImage(String imageName, String imageVersion) throws Exception {
-    log.debug("Building image " + imageName);
+  public void buildImage(File manifestFile) throws Exception {
+
+    long lastModified = 0;
 
     try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile, compress)) {
-      AciManifest manifest = createAciManifest(imageName, imageVersion);
-
-      aciFileWriter.addManifest(manifest);
+      aciFileWriter.addManifest(manifestFile);
 
       for (ContainerFile containerFile : addFiles) {
-        final Path sourcePath = containerFile.sourcePath;
+        final File sourcePath = containerFile.sourcePath;
 
         String imagePath = containerFile.imagePath;
         log.info(String.format("Writing %s -> %s", sourcePath, imagePath));
@@ -49,7 +52,8 @@ public class AppcContainerBuilder extends ContainerBuilder {
           aciFileWriter.mkdirs(dir);
         }
 
-        aciFileWriter.addFile(sourcePath.toFile(), imagePath);
+        aciFileWriter.addFile(sourcePath, imagePath);
+        lastModified = Math.max(lastModified, sourcePath.lastModified());
 
         // // ensure all directories exist because copy operation will fail if they don't
         // Files.createDirectories(destPath.getParent());
@@ -59,7 +63,10 @@ public class AppcContainerBuilder extends ContainerBuilder {
         // final Path relativePath = Paths.get(containerFile.imagePath);
         // copiedPaths.add(relativePath.toString());
       }
-      log.info("Built ACI " + imageName + ":" + imageVersion);
+    }
+
+    if (lastModified != 0) {
+      aciFile.setLastModified(lastModified);
     }
   }
 
@@ -130,5 +137,26 @@ public class AppcContainerBuilder extends ContainerBuilder {
       final List<String> args = ImmutableList.copyOf(Splitter.on(WHITESPACE).omitEmptyStrings().split(cmd));
       return args;
     }
+  }
+
+  @Override
+  public void writeManifest(File manifestFile, String imageName, String imageVersion) throws IOException {
+    AciManifest manifest = createAciManifest(imageName, imageVersion);
+    StringWriter writer = new StringWriter();
+    manifest.write(writer);
+    byte[] manifestData = writer.toString().getBytes(Charsets.UTF_8);
+    if (manifestFile.exists()) {
+      byte[] existing = Files.toByteArray(manifestFile);
+      if (Arrays.equals(existing, manifestData)) {
+        log.debug("Manifest unchanged; skipping write");
+        return;
+      }
+    }
+    Files.write(manifestData, manifestFile);
+  }
+
+  @Override
+  public List<ContainerFile> getContainerFiles() {
+    return Collections.unmodifiableList(this.addFiles);
   }
 }

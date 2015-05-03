@@ -1,13 +1,13 @@
 package com.coreos.appc;
 
-import java.nio.file.Path;
+import java.io.File;
 
 public class ContainerFile {
 
-  public final Path sourcePath;
+  public final File sourcePath;
   public final String imagePath;
 
-  public ContainerFile(Path sourcePath, String imagePath) {
+  public ContainerFile(File sourcePath, String imagePath) {
     this.sourcePath = sourcePath;
     this.imagePath = imagePath;
   }

@@ -6,7 +6,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.StringWriter;
 import java.util.Set;
 import java.util.zip.GZIPOutputStream;
 
@@ -16,9 +15,9 @@ import org.apache.commons.compress.archivers.ArchiveStreamFactory;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.utils.IOUtils;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Sets;
+import com.google.common.io.Files;
 
 public class AciFileWriter implements Closeable {
   final ArchiveOutputStream tarOutputStream;
@@ -35,8 +34,7 @@ public class AciFileWriter implements Closeable {
     }
     ArchiveOutputStream tarOutputStream;
     try {
-      tarOutputStream = new ArchiveStreamFactory().createArchiveOutputStream(
-          ArchiveStreamFactory.TAR, outputStream);
+      tarOutputStream = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, outputStream);
     } catch (ArchiveException e) {
       throw new IOException("Error creating output stream", e);
     }
@@ -101,10 +99,8 @@ public class AciFileWriter implements Closeable {
     tarOutputStream.closeArchiveEntry();
   }
 
-  public void addManifest(AciManifest manifest) throws IOException {
-    StringWriter writer = new StringWriter();
-    manifest.write(writer);
-    byte[] manifestData = writer.toString().getBytes(Charsets.UTF_8);
+  public void addManifest(File manifestFile) throws IOException {
+    byte[] manifestData = Files.toByteArray(manifestFile);
 
     TarArchiveEntry entry = new TarArchiveEntry("manifest");
     entry.setMode(TarArchiveEntry.DEFAULT_FILE_MODE);
