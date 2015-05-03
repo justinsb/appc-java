@@ -34,40 +34,27 @@ public class AppcContainerBuilder extends ContainerBuilder {
   }
 
   @Override
-  public void buildImage(File manifestFile) throws Exception {
+  public void buildImage(File manifestFile) throws IOException {
 
-    long lastModified = 0;
+    AciFileWriter aciFileWriter = new AciFileWriter();
 
-    try (AciFileWriter aciFileWriter = new AciFileWriter(aciFile, compress)) {
-      aciFileWriter.addManifest(manifestFile);
+    aciFileWriter.addManifest(manifestFile);
 
-      for (ContainerFile containerFile : addFiles) {
-        final File sourcePath = containerFile.sourcePath;
+    for (ContainerFile containerFile : addFiles) {
+      final File sourcePath = containerFile.sourcePath;
 
-        String imagePath = containerFile.imagePath;
-        log.info(String.format("Writing %s -> %s", sourcePath, imagePath));
+      String imagePath = containerFile.imagePath;
+      log.info(String.format("Writing %s -> %s", sourcePath, imagePath));
 
-        if (imagePath.contains("/")) {
-          String dir = imagePath.substring(0, imagePath.lastIndexOf('/'));
-          aciFileWriter.mkdirs(dir);
-        }
-
-        aciFileWriter.addFile(sourcePath, imagePath);
-        lastModified = Math.max(lastModified, sourcePath.lastModified());
-
-        // // ensure all directories exist because copy operation will fail if they don't
-        // Files.createDirectories(destPath.getParent());
-        // Files.copy(sourcePath, destPath, StandardCopyOption.REPLACE_EXISTING);
-        // Files.setLastModifiedTime(destPath, FileTime.fromMillis(0));
-        // // file location relative to docker directory, used later to generate Dockerfile
-        // final Path relativePath = Paths.get(containerFile.imagePath);
-        // copiedPaths.add(relativePath.toString());
+      if (imagePath.contains("/")) {
+        String dir = imagePath.substring(0, imagePath.lastIndexOf('/'));
+        aciFileWriter.mkdirs(dir);
       }
+
+      aciFileWriter.addFile(sourcePath, imagePath);
     }
 
-    if (lastModified != 0) {
-      aciFile.setLastModified(lastModified);
-    }
+    aciFileWriter.write(aciFile, compress);
   }
 
   private AciManifest createAciManifest(String imageName, String version) throws IOException {

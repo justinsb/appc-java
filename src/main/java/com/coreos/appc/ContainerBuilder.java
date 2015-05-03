@@ -24,7 +24,7 @@ public abstract class ContainerBuilder {
 
   public abstract void addFiles(List<ContainerFile> containerFiles) throws IOException;
 
-  public abstract void buildImage(File manifestFile) throws Exception;
+  public abstract void buildImage(File manifestFile) throws IOException;
 
   public abstract void writeManifest(File manifestFile, String imageName, String aciVersion) throws IOException;
 

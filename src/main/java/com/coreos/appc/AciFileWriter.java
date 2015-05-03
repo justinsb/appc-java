@@ -1,12 +1,11 @@
 package com.coreos.appc;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Set;
+import java.util.TreeMap;
 import java.util.zip.GZIPOutputStream;
 
 import org.apache.commons.compress.archivers.ArchiveException;
@@ -16,59 +15,93 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.utils.IOUtils;
 
 import com.google.common.base.Splitter;
-import com.google.common.collect.Sets;
-import com.google.common.io.Files;
+import com.google.common.collect.Maps;
 
-public class AciFileWriter implements Closeable {
-  final ArchiveOutputStream tarOutputStream;
+public class AciFileWriter {
+  final TreeMap<String, TarEntry> entries = Maps.newTreeMap();
 
-  final Set<String> directories = Sets.newHashSet();
+  static abstract class TarEntry {
+    final String tarPath;
 
-  public AciFileWriter(File outputFile, boolean compress) throws IOException {
-    this(new FileOutputStream(outputFile), compress);
-  }
-
-  public AciFileWriter(OutputStream outputStream, boolean compress) throws IOException {
-    if (compress) {
-      outputStream = new GZIPOutputStream(outputStream);
-    }
-    ArchiveOutputStream tarOutputStream;
-    try {
-      tarOutputStream = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, outputStream);
-    } catch (ArchiveException e) {
-      throw new IOException("Error creating output stream", e);
-    }
-    this.tarOutputStream = tarOutputStream;
-  }
-
-  @Override
-  public void close() throws IOException {
-    tarOutputStream.close();
-  }
-
-  public void mkdir(String imagePath) throws IOException {
-    if (!imagePath.endsWith("/")) {
-      imagePath += "/";
+    public TarEntry(String tarPath) {
+      this.tarPath = tarPath;
     }
 
-    String tarPath = toTarPath(imagePath);
+    public abstract void write(ArchiveOutputStream tarOutputStream) throws IOException;
 
-    TarArchiveEntry entry = new TarArchiveEntry(tarPath);
+    public boolean isDirectory() {
+      return false;
+    }
+  }
 
-    tarOutputStream.putArchiveEntry(entry);
-    tarOutputStream.closeArchiveEntry();
+  static class DirectoryTarEntry extends TarEntry {
+
+    public DirectoryTarEntry(String tarPath) {
+      super(tarPath);
+    }
+
+    public void write(ArchiveOutputStream tarOutputStream) throws IOException {
+      TarArchiveEntry entry = new TarArchiveEntry(tarPath);
+
+      tarOutputStream.putArchiveEntry(entry);
+      tarOutputStream.closeArchiveEntry();
+    }
+
+    public boolean isDirectory() {
+      return true;
+    }
+  }
+
+  static class FileTarEntry extends TarEntry {
+
+    final File src;
+
+    public FileTarEntry(String tarPath, File src) {
+      super(tarPath);
+      this.src = src;
+    }
+
+    public void write(ArchiveOutputStream tarOutputStream) throws IOException {
+      TarArchiveEntry entry = new TarArchiveEntry(src);
+      setMetadata(entry);
+
+      tarOutputStream.putArchiveEntry(entry);
+      try (FileInputStream fis = new FileInputStream(src)) {
+        IOUtils.copy(fis, tarOutputStream);
+      }
+      tarOutputStream.closeArchiveEntry();
+    }
+
+    protected void setMetadata(TarArchiveEntry entry) {
+      entry.setName(tarPath);
+    }
+  }
+
+  private void mkdir(String tarPath) throws IOException {
+    if (!tarPath.endsWith("/")) {
+      tarPath += "/";
+    }
+    if (entries.containsKey(tarPath)) {
+      throw new IllegalStateException();
+    }
+    entries.put(tarPath, new DirectoryTarEntry(tarPath));
   }
 
   public boolean hasDirectory(String imagePath) throws IOException {
     if (!imagePath.endsWith("/")) {
       imagePath += "/";
     }
-    return directories.contains(imagePath);
+    TarEntry tarEntry = entries.get(imagePath);
+    if (tarEntry == null)
+      return false;
+    return tarEntry.isDirectory();
   }
 
   public void mkdirs(String imagePath) throws IOException {
+    String tarPath = toTarPath(imagePath);
+
     String path = "";
-    for (String token : Splitter.on('/').split(imagePath)) {
+    for (String token : Splitter.on('/').split(tarPath)) {
       path += token + "/";
       if (!hasDirectory(path)) {
         mkdir(path);
@@ -89,27 +122,59 @@ public class AciFileWriter implements Closeable {
   public void addFile(File src, String imagePath) throws IOException {
     String tarPath = toTarPath(imagePath);
 
-    TarArchiveEntry entry = new TarArchiveEntry(src);
-    entry.setName(tarPath);
-
-    tarOutputStream.putArchiveEntry(entry);
-    try (FileInputStream fis = new FileInputStream(src)) {
-      IOUtils.copy(fis, tarOutputStream);
+    if (entries.containsKey(tarPath)) {
+      throw new IllegalStateException();
     }
-    tarOutputStream.closeArchiveEntry();
+    entries.put(tarPath, new FileTarEntry(tarPath, src));
   }
 
   public void addManifest(File manifestFile) throws IOException {
-    byte[] manifestData = Files.toByteArray(manifestFile);
+    String tarPath = "manifest";
 
-    TarArchiveEntry entry = new TarArchiveEntry("manifest");
-    entry.setMode(TarArchiveEntry.DEFAULT_FILE_MODE);
-    entry.setSize(manifestData.length);
-    entry.setUserId(0);
-    entry.setGroupId(0);
+    FileTarEntry fileTarEntry = new FileTarEntry(tarPath, manifestFile) {
+      @Override
+      protected void setMetadata(TarArchiveEntry entry) {
+        super.setMetadata(entry);
+        entry.setMode(TarArchiveEntry.DEFAULT_FILE_MODE);
+        entry.setUserId(0);
+        entry.setGroupId(0);
+      }
+    };
 
-    tarOutputStream.putArchiveEntry(entry);
-    tarOutputStream.write(manifestData);
-    tarOutputStream.closeArchiveEntry();
+    if (entries.containsKey(tarPath)) {
+      throw new IllegalStateException();
+    }
+    entries.put(tarPath, fileTarEntry);
+  }
+
+  public void write(File outputFile, boolean compress) throws IOException {
+    try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+      write(fos, compress);
+    }
+  }
+
+  void write(OutputStream outputStream, boolean compress) throws IOException {
+    if (compress) {
+      try (GZIPOutputStream gzipOutputStream = new GZIPOutputStream(outputStream)) {
+        write(gzipOutputStream);
+      }
+    } else {
+      write(outputStream);
+    }
+  }
+
+  void write(OutputStream outputStream) throws IOException {
+    try (ArchiveOutputStream tarOutputStream = new ArchiveStreamFactory().createArchiveOutputStream(
+        ArchiveStreamFactory.TAR, outputStream)) {
+      write(tarOutputStream);
+    } catch (ArchiveException e) {
+      throw new IOException("Error creating output stream", e);
+    }
+  }
+
+  public void write(ArchiveOutputStream tarOutputStream) throws IOException {
+    for (TarEntry entry : entries.values()) {
+      entry.write(tarOutputStream);
+    }
   }
 }
